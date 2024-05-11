@@ -22,10 +22,12 @@ import {
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
+
 const storeProfileSchema = z.object({
   name: z.string().min(1),
-  description: z.string(),
+  description: z.string().nullable(),
 })
+
 type StoreProfileSchema = z.infer<typeof storeProfileSchema>
 
 export function StoreProfileDialog() {
@@ -49,22 +51,42 @@ export function StoreProfileDialog() {
     },
   })
 
+  function updateManagedRestaurantCached({
+    name,
+    description,
+  }: StoreProfileSchema) {
+    const cached = queryClient.getQueryData<GetManagedRestaurantResponse>([
+      'managed-restaurant',
+    ])
+
+    if (cached) {
+      queryClient.setQueryData<GetManagedRestaurantResponse>(
+        ['managed-restaurant'],
+        {
+          ...cached,
+          name,
+          description,
+        },
+      )
+    }
+
+    return { cached }
+  }
+
   const { mutateAsync: updateProfileFn } = useMutation({
     mutationFn: updateProfile,
-    onSuccess(_, { description, name }) {
-      const cached = queryClient.getQueryData<GetManagedRestaurantResponse>([
-        'managed-restaurant',
-      ])
 
-      if (cached) {
-        queryClient.setQueryData<GetManagedRestaurantResponse>(
-          ['managed-restaurant'],
-          {
-            ...cached,
-            name,
-            description,
-          },
-        )
+    onMutate({ description, name }) {
+      const { cached } = updateManagedRestaurantCached({ name, description })
+
+      return { previousProfile: cached }
+    },
+
+    // tudo que é retornado do onMutate é adicionado ao contexto do onError
+    onError(_, __, context) {
+      if (context?.previousProfile) {
+        updateManagedRestaurantCached(context.previousProfile)
+        // esse onError volta a atualização para o ultimo nome salvo caso um erro ocorra
       }
     },
   })
